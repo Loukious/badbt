@@ -7,6 +7,7 @@ import dbus.mainloop.glib
 import time
 # import thread
 import keymap
+import bt_layouts
 
 
 class BtkStringClient():
@@ -14,7 +15,10 @@ class BtkStringClient():
     KEY_DOWN_TIME = 0.01
     KEY_DELAY = 0.01
 
-    def __init__(self):
+    def __init__(self, lang='us'):
+        # keyboard layout language
+        self.lang = lang
+
         # the structure for a bt keyboard input report (size is 10 bytes)
         self.state = [
             0xA1,  # this is an input report
@@ -86,34 +90,57 @@ class BtkStringClient():
         self.send_key_state()
 
     def send_string(self, string_to_send):
+        layout = bt_layouts.get_layout(self.lang)
         for c in string_to_send:
-            cu = c.upper()
-            modifiers = [ 0, 0, 0, 0, 0, 0, 0, 0 ]
-            if cu in self.scancodes:
-                scantablekey = self.scancodes[cu]
-                if scantablekey.islower():
-                    modifiers = [ 0, 0, 0, 0, 0, 0, 1, 0 ]
-                    scantablekey = scantablekey.upper()
+            if c in layout:
+                keystrokes = layout[c]
+                for scancode, modifiers in keystrokes:
+                    self.send_key_down(scancode, modifiers)
+                    time.sleep(BtkStringClient.KEY_DOWN_TIME)
+                    self.send_key_up()
+                    time.sleep(BtkStringClient.KEY_DELAY)
             else:
-                if c.isupper():
-                    modifiers = [ 0, 0, 0, 0, 0, 0, 1, 0 ]
-                scantablekey = "KEY_" + cu
-
-            scancode = keymap.keytable[scantablekey]
-            self.send_key_down(scancode, modifiers)
-            time.sleep(BtkStringClient.KEY_DOWN_TIME)
-            self.send_key_up()
-            time.sleep(BtkStringClient.KEY_DELAY)
+                # Fallback: try US layout via legacy scancodes dict + keymap
+                cu = c.upper()
+                modifiers = [0, 0, 0, 0, 0, 0, 0, 0]
+                if cu in self.scancodes:
+                    scantablekey = self.scancodes[cu]
+                    if scantablekey.islower():
+                        modifiers = [0, 0, 0, 0, 0, 0, 1, 0]
+                        scantablekey = scantablekey.upper()
+                else:
+                    if c.isupper():
+                        modifiers = [0, 0, 0, 0, 0, 0, 1, 0]
+                    scantablekey = "KEY_" + cu
+                if scantablekey in keymap.keytable:
+                    scancode = keymap.keytable[scantablekey]
+                    self.send_key_down(scancode, modifiers)
+                    time.sleep(BtkStringClient.KEY_DOWN_TIME)
+                    self.send_key_up()
+                    time.sleep(BtkStringClient.KEY_DELAY)
+                else:
+                    print(f"Warning: unsupported character '{c}' for layout '{self.lang}'")
 
 if __name__ == "__main__":
     if(len(sys.argv) < 2):
-        print("Usage: send_string <string to send> [mobile | mobilewww | windows | linux | mac] [win7 | win8 | win10 | win11]")
+        print("Usage: send_string <string to send> [mobile | mobilewww | windows | linux | mac] [win7 | win8 | win10 | win11] [-l language]")
         exit()
-    dc = BtkStringClient()
-    string_to_send = sys.argv[1]
-    prefix = sys.argv[2]
-    uac = sys.argv[3]
-    print("Sending " + string_to_send)
+
+    # Parse -l language flag from argv
+    lang = 'us'
+    args = sys.argv[1:]
+    if '-l' in args:
+        idx = args.index('-l')
+        if idx + 1 < len(args):
+            lang = args[idx + 1].lower()
+            args = args[:idx] + args[idx + 2:]
+
+    string_to_send = args[0] if len(args) > 0 else ''
+    prefix = args[1] if len(args) > 1 else ''
+    uac = args[2] if len(args) > 2 else ''
+
+    dc = BtkStringClient(lang=lang)
+    print(f"Sending '{string_to_send}' (layout: {lang})")
 # Send custom prefix
     if prefix == "mobile":
         scantablekey = "KEY_ENTER"

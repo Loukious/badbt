@@ -46,15 +46,18 @@ if __name__ == "__main__":
     if not os.geteuid() == 0:
         sys.exit("[!]Run as root")
 
-    sopts = 'hd:'
+    sopts = 'hd:l:'
     opts, args = getopt.getopt(sys.argv[1:], sopts)
 
+    lang = 'us'
     for opt, arg in opts:
         if opt == '-h':
-            print(f'\nUsage:\n\tpython {sys.argv[0]} -d [DUCKY_TXT]')
+            print(f'\nUsage:\n\tpython {sys.argv[0]} -d [DUCKY_TXT] [-l LANGUAGE]')
             sys.exit()
         elif opt == '-d':
             ducky = arg
+        elif opt == '-l':
+            lang = arg.lower()
 
         with open(ducky, 'r') as f:
             txt = f.readlines()
@@ -62,7 +65,7 @@ if __name__ == "__main__":
         for i in range(len(txt)):
             txt[i] = txt[i].strip()
 
-        ducky = BtkStringClient()
+        ducky = BtkStringClient(lang=lang)
 
         for line in range(len(txt)):
             if txt[line]:
